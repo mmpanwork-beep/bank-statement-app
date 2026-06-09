@@ -7,15 +7,20 @@ import io
 # 1. ตั้งค่าหน้าเพจให้กว้างและตั้งชื่อแอป
 st.set_page_config(page_title="Bank Statement Analyzer", page_icon="✨", layout="wide")
 
-# 2. 🎨 CSS ยกเครื่องดีไซน์ใหม่ทั้งหมด (Modern UI)
+# 2. 🎨 CSS ยกเครื่องดีไซน์ใหม่ทั้งหมด (Modern UI) - แก้บั๊กตัวหนังสือทับกัน
 st.markdown("""
 <style>
     /* นำเข้าฟอนต์ Prompt จาก Google Fonts */
     @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
     
-    /* บังคับใช้ฟอนต์ Prompt ทั้งเว็บ */
-    html, body, [class*="css"], [class*="st-"] { 
-        font-family: 'Prompt', sans-serif !important; 
+    /* บังคับใช้ฟอนต์ Prompt แต่ไม่ใช้ !important พร่ำเพรื่อเพื่อป้องกันการทับไอคอน */
+    html, body, div, span, applet, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote, pre, a, abbr, acronym, address, big, cite, code, del, dfn, em, img, ins, kbd, q, s, samp, small, strike, strong, sub, sup, tt, var, b, u, i, center, dl, dt, dd, ol, ul, li, fieldset, form, label, legend, table, caption, tbody, tfoot, thead, tr, th, td, article, aside, canvas, details, embed, figure, figcaption, footer, header, hgroup, menu, nav, output, ruby, section, summary, time, mark, audio, video, button, input, optgroup, select, textarea {
+        font-family: 'Prompt', sans-serif;
+    }
+
+    /* 💡 [แก้ไขบั๊ก] คืนค่าฟอนต์ไอคอนให้ระบบ ป้องกันคำว่า upload โผล่มาทับกัน */
+    [data-testid="stIconMaterial"], .material-icons, .material-symbols-rounded {
+        font-family: 'Material Symbols Rounded' !important;
     }
 
     /* หัวข้อเว็บแบบไล่สี (Gradient Text) */
