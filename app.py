@@ -39,7 +39,7 @@ def reset_app():
 # ==========================================
 col_title, col_reset = st.columns([4, 1])
 with col_title:
-    st.title("🏦✨ ระบบวิเคราะห์ Bank Statement 🐻 (v4.0)")
+    st.title("🏦✨ ระบบวิเคราะห์ Bank Statement 🐻 (v4.1)")
     st.markdown("ผู้ช่วยสรุปยอด กรองข้อมูล และส่งออก Excel (รองรับ กสิกรไทย, กรุงไทย และ ออมสิน 100%)")
 with col_reset:
     st.write("") 
@@ -60,13 +60,12 @@ if 'processed_df' not in st.session_state:
                 
                 col_bank, col_pw = st.columns(2)
                 with col_bank:
-                    # 💡 อัปเดต: เพิ่มธนาคารออมสินลงในตัวเลือก
                     bank_choice = st.selectbox(
                         "🏦 เลือกธนาคารของไฟล์นี้:", 
                         [
+                            "🟢 ธนาคารออมสิน (GSB)",
                             "🟢 ธนาคารกสิกรไทย (KBank)", 
-                            "🟢 ธนาคารกรุงไทย (Krungthai)",
-                            "🟢 ธนาคารออมสิน (GSB)"
+                            "🟢 ธนาคารกรุงไทย (Krungthai)"
                         ] 
                     )
                 with col_pw:
@@ -84,48 +83,46 @@ if 'processed_df' not in st.session_state:
                             
                             with pdfplumber.open(uploaded_file, password=pdf_password if pdf_password else None) as pdf:
                                 for page in pdf.pages:
-                                    
-                                    # ระบบสแกนพิกัด (Coordinate-based Scanning)
                                     words = page.extract_words(x_tolerance=2, y_tolerance=3, keep_blank_chars=False)
                                     if not words: continue
                                     
-                                    # จัดกลุ่มคำที่อยู่บรรทัดเดียวกัน (พิกัดแกน Y ตรงกัน)
                                     lines_dict = {}
                                     for w in words:
-                                        top = round(w['top'] / 4) * 4 # เผื่อความคลาดเคลื่อน 4 pixel
+                                        top = round(w['top'] / 4) * 4 
                                         if top not in lines_dict: lines_dict[top] = []
                                         lines_dict[top].append(w)
                                         
                                     for top in sorted(lines_dict.keys()):
-                                        # เรียงคำในบรรทัดจากซ้ายไปขวา (แกน X)
                                         row_words = sorted(lines_dict[top], key=lambda w: w['x0'])
                                         line = " ".join([w['text'] for w in row_words]).strip()
                                         
                                         if not line: continue
                                         raw_text_debug += line + "\n"
                                         
-                                        # จับยอดยกมา
-                                        if "ยอดยกมา" in line or "B/F" in line:
+                                        # 💡 บีบอัดตัวอักษร ตัดช่องว่างทิ้ง เพื่อให้สแกนคำต้องห้ามได้แม่นยำ 100%
+                                        line_no_spaces = line.replace(' ', '').replace('\u200b', '').lower()
+                                        
+                                        if "ยอดยกมา" in line_no_spaces or "b/f" in line_no_spaces:
                                             m = re.findall(r'(?<!\d)(?:\d{1,3}(?:,\d{3})*|\d+)\.\d{2}', line)
                                             if m: opening_balance = float(m[-1].replace(',', ''))
                                             continue
                                         
-                                        # 💡 อัปเดต: แยกคำสั่งข้ามหัวตาราง/ท้ายกระดาษตามธนาคาร
+                                        # 💡 ข้ามบรรทัดสรุปยอด (บล็อคตัวเลขเกิน)
                                         if bank_choice == "🟢 ธนาคารกสิกรไทย (KBank)":
-                                            skip_keywords = ['รวมถอนเงิน', 'รวมฝากเงิน', 'ยอดยกไป', 'C/F', 'เลขที่อ้างอิง', 'รอบระหว่างวันที่', 'PAGE/OF', 'หน้าที่', 'รายการเดินบัญชี', 'วันที่ เวลา', 'รายละเอียด']
+                                            skip_keywords = ['รวมถอนเงิน', 'รวมฝากเงิน', 'ยอดยกไป', 'c/f', 'เลขที่อ้างอิง', 'รอบระหว่างวันที่', 'page/of', 'หน้าที่', 'รายการเดินบัญชี']
                                         elif bank_choice == "🟢 ธนาคารกรุงไทย (Krungthai)":
-                                            skip_keywords = ['รายการถอนทั้งหมด', 'รายการฝากทั้งหมด', 'ยอดยกไป', 'C/F', 'PAGE/OF', 'หน้าที่', 'วันที่ เวลา', 'รายละเอียด']
+                                            skip_keywords = ['รายการถอนทั้งหมด', 'รายการฝากทั้งหมด', 'ยอดยกไป', 'c/f', 'page/of', 'หน้าที่']
                                         else: # ออมสิน (GSB)
-                                            skip_keywords = ['ยอดยกไป', 'รวมรายการถอน', 'รวมรายการฝาก', 'หน้าที่', 'วันที่พิมพ์', 'ชื่อบัญชี', 'สาขา', 'เลขที่บัญชี', 'รายการถอน', 'รายการฝาก', 'ยอดคงเหลือ']
+                                            skip_keywords = ['ยอดยกไป', 'ยอดรวม', 'รวมรายการถอน', 'รวมรายการฝาก', 'หน้าที่', 'วันที่พิมพ์', 'ชื่อบัญชี', 'เลขที่บัญชี']
                                             
-                                        if any(word in line for word in skip_keywords):
+                                        if any(word in line_no_spaces for word in skip_keywords):
                                             continue
                                             
-                                        # 1. หาวันที่ และ ตัวเลขทางการเงิน
+                                        # หาวันที่ และ ตัวเลขทางการเงิน
                                         date_match = re.search(r'(\d{2}\s*[-/]\s*\d{2}\s*[-/]\s*(?:\d{4}|\d{2}))', line)
                                         money_matches = re.findall(r'(?<!\d)(?:\d{1,3}(?:,\d{3})*|\d+)\.\d{2}', line)
                                         
-                                        # 2. จำแนกสถานะบรรทัด
+                                        # จำแนกสถานะบรรทัด
                                         is_txn = False
                                         if date_match and len(money_matches) >= 1: is_txn = True
                                         elif not date_match and last_seen_date and len(money_matches) >= 2: is_txn = True
@@ -134,7 +131,7 @@ if 'processed_df' not in st.session_state:
                                         if is_txn:
                                             # --- เป็นรายการหลัก ---
                                             if current_txn:
-                                                parsed_data.append(current_txn) # เซฟรายการก่อนหน้า
+                                                parsed_data.append(current_txn)
                                                 
                                             date_str = last_seen_date
                                             if date_match:
@@ -153,9 +150,9 @@ if 'processed_df' not in st.session_state:
                                             if time_match: desc = desc.replace(time_match.group(0), '', 1)
                                             for m in money_matches: desc = desc.replace(m, '', 1)
                                             desc = re.sub(r'\s+', ' ', desc).strip()
-                                            desc = re.sub(r'\d+$', '', desc).strip() # ลบเลขสาขา
+                                            desc = re.sub(r'\d+$', '', desc).strip() 
                                             
-                                            # 💡 อัปเดต: การแยกฝาก/ถอนเบื้องต้น (ตามธนาคาร)
+                                            # การแยกฝาก/ถอนเบื้องต้น 
                                             deposit, withdraw = 0.0, 0.0
                                             if amt > 0:
                                                 if bank_choice == "🟢 ธนาคารกรุงไทย (Krungthai)":
@@ -174,30 +171,19 @@ if 'processed_df' not in st.session_state:
                                             }
                                             
                                         elif not date_match and last_seen_date and current_txn:
-                                            # --- เป็นส่วนขยายบรรทัดของรายการก่อนหน้า ---
-                                            if money_matches:
-                                                parsed_data.append(current_txn)
-                                                amt = float(money_matches[0].replace(',', ''))
-                                                balance = float(money_matches[-1].replace(',', '')) if len(money_matches) > 1 else 0.0
-                                                desc = line
-                                                for m in money_matches: desc = desc.replace(m, '', 1)
-                                                current_txn = {
-                                                    'Date': last_seen_date, 'Time': '-', 'Description': re.sub(r'\s+', ' ', desc).strip(),
-                                                    'Deposit': 0.0, 'Withdrawal': amt, 'Balance': balance, 'RawAmt': amt
-                                                }
-                                            else:
-                                                time_match = re.search(r'(\d{2}[:.]\d{2})', line)
-                                                if time_match and current_txn['Time'] == '-':
-                                                    current_txn['Time'] = time_match.group(1).replace('.', ':')
-                                                    line = line.replace(time_match.group(0), '', 1)
-                                                current_txn['Description'] += " " + re.sub(r'\s+', ' ', line).strip()
+                                            # --- เป็นส่วนขยายบรรทัดของรายการก่อนหน้า (ไม่มีตัวเลขยอดเงินมาป่วนแล้ว) ---
+                                            time_match = re.search(r'(\d{2}[:.]\d{2})', line)
+                                            if time_match and current_txn['Time'] == '-':
+                                                current_txn['Time'] = time_match.group(1).replace('.', ':')
+                                                line = line.replace(time_match.group(0), '', 1)
+                                            current_txn['Description'] += " " + re.sub(r'\s+', ' ', line).strip()
                                                 
                                     if current_txn:
                                         parsed_data.append(current_txn)
                                         current_txn = None
                                         
                             if parsed_data:
-                                # พิสูจน์ยอดด้วยสมการคณิตศาสตร์ 100% (กันเหนียวให้ทุกธนาคาร)
+                                # พิสูจน์ยอดด้วยสมการคณิตศาสตร์ 100%
                                 for i in range(len(parsed_data)):
                                     txn = parsed_data[i]
                                     prev_balance = parsed_data[i-1]['Balance'] if i > 0 else opening_balance
@@ -222,7 +208,7 @@ if 'processed_df' not in st.session_state:
                             else:
                                 st.error("❌ ไม่พบข้อมูลรายการจ้า (ไฟล์อาจมีโครงสร้างซับซ้อนมาก)")
                                 with st.expander("👀 คลิกดูข้อความดิบที่ AI มองเห็น (เช็คว่ามีตัวหนังสือถูกดึงมาไหม)"):
-                                    st.text(raw_text_debug[:5000] if raw_text_debug else "ไม่พบตัวหนังสือใดๆ (ไฟล์อาจเป็นรูปภาพสแกน)")
+                                    st.text(raw_text_debug[:5000] if raw_text_debug else "ไม่พบตัวหนังสือใดๆ")
                         except Exception as e:
                             st.error(f"❌ เกิดข้อผิดพลาด: {e}")
             else:
