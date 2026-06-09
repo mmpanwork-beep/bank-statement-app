@@ -39,8 +39,8 @@ def reset_app():
 # ==========================================
 col_title, col_reset = st.columns([4, 1])
 with col_title:
-    st.title("🏦✨ ระบบวิเคราะห์ Bank Statement 🐻 (v3.0)")
-    st.markdown("ผู้ช่วยสรุปยอด กรองข้อมูล และส่งออก Excel (รองรับ กรุงไทย และ กสิกรไทยแบบ 100%)")
+    st.title("🏦✨ ระบบวิเคราะห์ Bank Statement 🐻 (v4.0)")
+    st.markdown("ผู้ช่วยสรุปยอด กรองข้อมูล และส่งออก Excel (รองรับ กสิกรไทย, กรุงไทย และ ออมสิน 100%)")
 with col_reset:
     st.write("") 
     if st.button("🗑️ ล้างข้อมูล / อัปโหลดใหม่", use_container_width=True):
@@ -60,9 +60,14 @@ if 'processed_df' not in st.session_state:
                 
                 col_bank, col_pw = st.columns(2)
                 with col_bank:
+                    # 💡 อัปเดต: เพิ่มธนาคารออมสินลงในตัวเลือก
                     bank_choice = st.selectbox(
                         "🏦 เลือกธนาคารของไฟล์นี้:", 
-                        ["🟢 ธนาคารกสิกรไทย (KBank)", "🟢 ธนาคารกรุงไทย (Krungthai)"] 
+                        [
+                            "🟢 ธนาคารกสิกรไทย (KBank)", 
+                            "🟢 ธนาคารกรุงไทย (Krungthai)",
+                            "🟢 ธนาคารออมสิน (GSB)"
+                        ] 
                     )
                 with col_pw:
                     pdf_password = st.text_input("🔒 รหัสผ่านเปิด PDF (ถ้ามี):", type="password")
@@ -80,19 +85,17 @@ if 'processed_df' not in st.session_state:
                             with pdfplumber.open(uploaded_file, password=pdf_password if pdf_password else None) as pdf:
                                 for page in pdf.pages:
                                     
-                                    # 💡 [อัปเกรดล่าสุด] ระบบสแกนพิกัด (Coordinate-based Scanning)
+                                    # ระบบสแกนพิกัด (Coordinate-based Scanning)
                                     words = page.extract_words(x_tolerance=2, y_tolerance=3, keep_blank_chars=False)
                                     if not words: continue
                                     
                                     # จัดกลุ่มคำที่อยู่บรรทัดเดียวกัน (พิกัดแกน Y ตรงกัน)
                                     lines_dict = {}
                                     for w in words:
-                                        # เผื่อความคลาดเคลื่อน 4 pixel (ป้องกันบรรทัดเบี้ยว)
-                                        top = round(w['top'] / 4) * 4
+                                        top = round(w['top'] / 4) * 4 # เผื่อความคลาดเคลื่อน 4 pixel
                                         if top not in lines_dict: lines_dict[top] = []
                                         lines_dict[top].append(w)
                                         
-                                    # เรียงบรรทัดจากบนลงล่าง
                                     for top in sorted(lines_dict.keys()):
                                         # เรียงคำในบรรทัดจากซ้ายไปขวา (แกน X)
                                         row_words = sorted(lines_dict[top], key=lambda w: w['x0'])
@@ -101,14 +104,20 @@ if 'processed_df' not in st.session_state:
                                         if not line: continue
                                         raw_text_debug += line + "\n"
                                         
-                                        # 💡 จับยอดยกมา
+                                        # จับยอดยกมา
                                         if "ยอดยกมา" in line or "B/F" in line:
                                             m = re.findall(r'(?<!\d)(?:\d{1,3}(?:,\d{3})*|\d+)\.\d{2}', line)
                                             if m: opening_balance = float(m[-1].replace(',', ''))
                                             continue
                                         
-                                        # ข้ามหัวตาราง/ท้ายกระดาษ
-                                        skip_keywords = ['รวมถอนเงิน', 'รวมฝากเงิน', 'ยอดยกไป', 'C/F', 'รายการถอนทั้งหมด', 'รายการฝากทั้งหมด', 'เลขที่อ้างอิง', 'รอบระหว่างวันที่', 'PAGE/OF', 'หน้าที่', 'รายการเดินบัญชี', 'วันที่ เวลา', 'รายละเอียด']
+                                        # 💡 อัปเดต: แยกคำสั่งข้ามหัวตาราง/ท้ายกระดาษตามธนาคาร
+                                        if bank_choice == "🟢 ธนาคารกสิกรไทย (KBank)":
+                                            skip_keywords = ['รวมถอนเงิน', 'รวมฝากเงิน', 'ยอดยกไป', 'C/F', 'เลขที่อ้างอิง', 'รอบระหว่างวันที่', 'PAGE/OF', 'หน้าที่', 'รายการเดินบัญชี', 'วันที่ เวลา', 'รายละเอียด']
+                                        elif bank_choice == "🟢 ธนาคารกรุงไทย (Krungthai)":
+                                            skip_keywords = ['รายการถอนทั้งหมด', 'รายการฝากทั้งหมด', 'ยอดยกไป', 'C/F', 'PAGE/OF', 'หน้าที่', 'วันที่ เวลา', 'รายละเอียด']
+                                        else: # ออมสิน (GSB)
+                                            skip_keywords = ['ยอดยกไป', 'รวมรายการถอน', 'รวมรายการฝาก', 'หน้าที่', 'วันที่พิมพ์', 'ชื่อบัญชี', 'สาขา', 'เลขที่บัญชี', 'รายการถอน', 'รายการฝาก', 'ยอดคงเหลือ']
+                                            
                                         if any(word in line for word in skip_keywords):
                                             continue
                                             
@@ -146,13 +155,15 @@ if 'processed_df' not in st.session_state:
                                             desc = re.sub(r'\s+', ' ', desc).strip()
                                             desc = re.sub(r'\d+$', '', desc).strip() # ลบเลขสาขา
                                             
-                                            # การแยกฝาก/ถอนเบื้องต้น (เดี๋ยวสมการจะมาพิสูจน์อีกที)
+                                            # 💡 อัปเดต: การแยกฝาก/ถอนเบื้องต้น (ตามธนาคาร)
                                             deposit, withdraw = 0.0, 0.0
                                             if amt > 0:
                                                 if bank_choice == "🟢 ธนาคารกรุงไทย (Krungthai)":
                                                     in_keywords = ['เข้า', 'ฝาก', 'รับ', 'fr ', 'BSD', 'Deposit', 'IORDT', 'MORISD', 'NMIPSD', 'เงินเดือน', 'คืน']
-                                                else: 
+                                                elif bank_choice == "🟢 ธนาคารกสิกรไทย (KBank)": 
                                                     in_keywords = ['รับโอน', 'ฝาก', 'รับเงิน', 'ดอกเบี้ย', 'เงินเข้า', 'คืนเงิน']
+                                                else: # ออมสิน (GSB)
+                                                    in_keywords = ['ฝาก', 'รับโอน', 'โอนเข้า', 'ดอกเบี้ย', 'เงินเข้า', 'คืน', 'SD', 'DEP']
                                                     
                                                 if any(w in desc for w in in_keywords): deposit = amt
                                                 else: withdraw = amt
@@ -186,7 +197,7 @@ if 'processed_df' not in st.session_state:
                                         current_txn = None
                                         
                             if parsed_data:
-                                # 💡 พิสูจน์ยอดด้วยสมการคณิตศาสตร์ 100% 
+                                # พิสูจน์ยอดด้วยสมการคณิตศาสตร์ 100% (กันเหนียวให้ทุกธนาคาร)
                                 for i in range(len(parsed_data)):
                                     txn = parsed_data[i]
                                     prev_balance = parsed_data[i-1]['Balance'] if i > 0 else opening_balance
@@ -196,7 +207,7 @@ if 'processed_df' not in st.session_state:
                                         raw_amt = round(txn['RawAmt'], 2)
                                         
                                         if raw_amt > 0:
-                                            if abs(diff - raw_amt) < 0.02: # ยืดหยุ่นทศนิยมเล็กน้อย
+                                            if abs(diff - raw_amt) < 0.02: 
                                                 txn['Deposit'], txn['Withdrawal'] = raw_amt, 0.0
                                             elif abs(diff - (-raw_amt)) < 0.02: 
                                                 txn['Withdrawal'], txn['Deposit'] = raw_amt, 0.0
